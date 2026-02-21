@@ -1,0 +1,24 @@
+<Project>
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <!-- Fix MSBuildLocator compatibility with MSBuild packages (non-test projects) -->
+  <ItemGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests'))">
+    <PackageReference Include="Microsoft.Build.Framework"
+                      Version="17.11.31"
+                      ExcludeAssets="runtime"
+                      PrivateAssets="all" />
+    <PackageReference Include="NuGet.Frameworks"
+                      Version="6.12.4"
+                      ExcludeAssets="runtime"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- For test projects, disable MSBuildLocator validation (test runner needs NuGet.Frameworks at runtime) -->
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <DisableMSBuildAssemblyCopyCheck>true</DisableMSBuildAssemblyCopyCheck>
+  </PropertyGroup>
+</Project>
