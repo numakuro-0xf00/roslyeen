@@ -4,42 +4,45 @@ namespace RoslynQuery.Core.Tests.Unit;
 
 public class PathResolverTests
 {
+    // Build platform-appropriate test paths using temp directory as a stable rooted base.
+    private static readonly string TempBase = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+    private static readonly string ProjectRoot = Path.Combine(TempBase, "user", "project");
+    private static readonly string FileUnderRoot = Path.Combine(ProjectRoot, "src", "MyClass.cs");
+    private static readonly string OtherRoot = Path.Combine(TempBase, "other");
+    private static readonly string FileOutsideRoot = Path.Combine(OtherRoot, "path", "MyClass.cs");
+    private static readonly string SolutionFile = Path.Combine(ProjectRoot, "MySolution.sln");
+
     #region ToRelativePath
 
     [Fact]
     public void ToRelativePath_WithFileUnderRoot_ReturnsRelativePath()
     {
-        var root = "/home/user/project";
-        var absolute = "/home/user/project/src/MyClass.cs";
+        var relative = PathResolver.ToRelativePath(FileUnderRoot, ProjectRoot);
 
-        var relative = PathResolver.ToRelativePath(absolute, root);
-
-        Assert.Equal("src/MyClass.cs", relative);
+        Assert.Equal(Path.Combine("src", "MyClass.cs"), relative);
     }
 
     [Fact]
     public void ToRelativePath_WithFileNotUnderRoot_ReturnsOriginalPath()
     {
-        var root = "/home/user/project";
-        var absolute = "/other/path/MyClass.cs";
+        var relative = PathResolver.ToRelativePath(FileOutsideRoot, ProjectRoot);
 
-        var relative = PathResolver.ToRelativePath(absolute, root);
-
-        Assert.Equal("/other/path/MyClass.cs", relative);
+        // When not under root, the original (unnormalized) input is returned
+        Assert.Equal(FileOutsideRoot, relative);
     }
 
     [Fact]
     public void ToRelativePath_NullAbsolutePath_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            PathResolver.ToRelativePath(null!, "/root"));
+            PathResolver.ToRelativePath(null!, ProjectRoot));
     }
 
     [Fact]
     public void ToRelativePath_NullRoot_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            PathResolver.ToRelativePath("/file.cs", null!));
+            PathResolver.ToRelativePath(FileUnderRoot, null!));
     }
 
     #endregion
@@ -49,30 +52,26 @@ public class PathResolverTests
     [Fact]
     public void ToAbsolutePath_WithRelativePath_ReturnsAbsolutePath()
     {
-        var root = "/home/user/project";
-        var relative = "src/MyClass.cs";
+        var relative = Path.Combine("src", "MyClass.cs");
 
-        var absolute = PathResolver.ToAbsolutePath(relative, root);
+        var absolute = PathResolver.ToAbsolutePath(relative, ProjectRoot);
 
-        Assert.Equal("/home/user/project/src/MyClass.cs", absolute);
+        Assert.Equal(PathResolver.NormalizePath(FileUnderRoot), absolute);
     }
 
     [Fact]
     public void ToAbsolutePath_WithAbsolutePath_ReturnsSamePath()
     {
-        var root = "/home/user/project";
-        var absolute = "/other/path/MyClass.cs";
+        var result = PathResolver.ToAbsolutePath(FileOutsideRoot, ProjectRoot);
 
-        var result = PathResolver.ToAbsolutePath(absolute, root);
-
-        Assert.Equal("/other/path/MyClass.cs", result);
+        Assert.Equal(PathResolver.NormalizePath(FileOutsideRoot), result);
     }
 
     [Fact]
     public void ToAbsolutePath_NullRelativePath_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            PathResolver.ToAbsolutePath(null!, "/root"));
+            PathResolver.ToAbsolutePath(null!, ProjectRoot));
     }
 
     [Fact]
@@ -87,13 +86,16 @@ public class PathResolverTests
     #region NormalizePath
 
     [Fact]
-    public void NormalizePath_WithMixedSeparators_ReturnsNormalizedPath()
+    public void NormalizePath_WithMixedSeparators_UnifiestoNativeSeparator()
     {
-        var path = "/home/user/project\\src/MyClass.cs";
+        // Build a path with the non-native separator mixed in
+        var nativeSep = Path.DirectorySeparatorChar;
+        var foreignSep = nativeSep == '/' ? '\\' : '/';
+        var path = ProjectRoot + foreignSep + "src" + nativeSep + "MyClass.cs";
 
         var normalized = PathResolver.NormalizePath(path);
 
-        Assert.DoesNotContain("\\", normalized);
+        Assert.DoesNotContain(foreignSep.ToString(), normalized);
     }
 
     [Fact]
@@ -119,9 +121,7 @@ public class PathResolverTests
     [Fact]
     public void GetSocketPath_ReturnsValidSocketPath()
     {
-        var solutionPath = "/home/user/project/MySolution.sln";
-
-        var socketPath = PathResolver.GetSocketPath(solutionPath);
+        var socketPath = PathResolver.GetSocketPath(SolutionFile);
 
         Assert.EndsWith(".sock", socketPath);
         Assert.Contains("roslyn-query-", socketPath);
@@ -130,8 +130,8 @@ public class PathResolverTests
     [Fact]
     public void GetSocketPath_SameSolution_ReturnsSamePath()
     {
-        var socketPath1 = PathResolver.GetSocketPath("/home/user/project/MySolution.sln");
-        var socketPath2 = PathResolver.GetSocketPath("/home/user/project/MySolution.sln");
+        var socketPath1 = PathResolver.GetSocketPath(SolutionFile);
+        var socketPath2 = PathResolver.GetSocketPath(SolutionFile);
 
         Assert.Equal(socketPath1, socketPath2);
     }
@@ -139,8 +139,11 @@ public class PathResolverTests
     [Fact]
     public void GetSocketPath_DifferentSolutions_ReturnsDifferentPaths()
     {
-        var socketPath1 = PathResolver.GetSocketPath("/home/user/project1/MySolution.sln");
-        var socketPath2 = PathResolver.GetSocketPath("/home/user/project2/MySolution.sln");
+        var solution1 = Path.Combine(TempBase, "project1", "MySolution.sln");
+        var solution2 = Path.Combine(TempBase, "project2", "MySolution.sln");
+
+        var socketPath1 = PathResolver.GetSocketPath(solution1);
+        var socketPath2 = PathResolver.GetSocketPath(solution2);
 
         Assert.NotEqual(socketPath1, socketPath2);
     }
@@ -159,9 +162,7 @@ public class PathResolverTests
     [Fact]
     public void GetPidFilePath_ReturnsValidPidPath()
     {
-        var solutionPath = "/home/user/project/MySolution.sln";
-
-        var pidPath = PathResolver.GetPidFilePath(solutionPath);
+        var pidPath = PathResolver.GetPidFilePath(SolutionFile);
 
         Assert.EndsWith(".pid", pidPath);
         Assert.Contains("roslyn-query-", pidPath);
@@ -181,11 +182,9 @@ public class PathResolverTests
     [Fact]
     public void GetSolutionRoot_ReturnsParentDirectory()
     {
-        var solutionPath = "/home/user/project/MySolution.sln";
+        var root = PathResolver.GetSolutionRoot(SolutionFile);
 
-        var root = PathResolver.GetSolutionRoot(solutionPath);
-
-        Assert.Equal("/home/user/project", root);
+        Assert.Equal(PathResolver.NormalizePath(ProjectRoot), root);
     }
 
     [Fact]
@@ -202,23 +201,19 @@ public class PathResolverTests
     [Fact]
     public void ToRelativePath_RootWithTrailingSlash_StillWorks()
     {
-        var root = "/home/user/project/";
-        var absolute = "/home/user/project/src/MyClass.cs";
+        var rootWithSlash = ProjectRoot + Path.DirectorySeparatorChar;
 
-        var relative = PathResolver.ToRelativePath(absolute, root);
+        var relative = PathResolver.ToRelativePath(FileUnderRoot, rootWithSlash);
 
-        Assert.Equal("src/MyClass.cs", relative);
+        Assert.Equal(Path.Combine("src", "MyClass.cs"), relative);
     }
 
     [Fact]
     public void ToRelativePath_RootWithoutTrailingSlash_StillWorks()
     {
-        var root = "/home/user/project";
-        var absolute = "/home/user/project/src/MyClass.cs";
+        var relative = PathResolver.ToRelativePath(FileUnderRoot, ProjectRoot);
 
-        var relative = PathResolver.ToRelativePath(absolute, root);
-
-        Assert.Equal("src/MyClass.cs", relative);
+        Assert.Equal(Path.Combine("src", "MyClass.cs"), relative);
     }
 
     #endregion
