@@ -17,7 +17,9 @@ public static class OutputFormatter
     {
         if (response?.Location == null)
         {
-            return format == OutputFormat.Json ? "{\"location\": null}" : null;
+            if (format == OutputFormat.Json)
+                return "{\"location\": null}";
+            return null;
         }
 
         if (format == OutputFormat.Json)
@@ -35,7 +37,9 @@ public static class OutputFormatter
     {
         if (response == null || response.Locations.Count == 0)
         {
-            return format == OutputFormat.Json ? "{\"locations\": [], \"count\": 0}" : null;
+            if (format == OutputFormat.Json)
+                return "{\"locations\": [], \"count\": 0}";
+            return null;
         }
 
         if (format == OutputFormat.Json)
@@ -43,7 +47,8 @@ public static class OutputFormatter
             return IpcSerializer.Serialize(response);
         }
 
-        return string.Join(Environment.NewLine, response.Locations.Select(loc => loc.Location.ToString()));
+        var lines = response.Locations.Select(loc => loc.Location.ToString());
+        return string.Join(Environment.NewLine, lines);
     }
 
     /// <summary>
@@ -53,7 +58,9 @@ public static class OutputFormatter
     {
         if (response == null)
         {
-            return format == OutputFormat.Json ? "{\"symbol\": null}" : null;
+            if (format == OutputFormat.Json)
+                return "{\"symbol\": null}";
+            return null;
         }
 
         if (format == OutputFormat.Json)
@@ -116,9 +123,11 @@ public static class OutputFormatter
     /// </summary>
     public static string? FormatDiagnostics(DiagnosticsResponse? response, OutputFormat format)
     {
-        if (response == null)
+        if (response == null || response.Diagnostics.Count == 0)
         {
-            return format == OutputFormat.Json ? "{\"diagnostics\": []}" : null;
+            if (format == OutputFormat.Json)
+                return "{\"diagnostics\": []}";
+            return null;
         }
 
         if (format == OutputFormat.Json)
@@ -126,18 +135,21 @@ public static class OutputFormatter
             return IpcSerializer.Serialize(response);
         }
 
-        if (response.Diagnostics.Count == 0)
-        {
-            return null;
-        }
+        var lines = new List<string>();
 
-        var lines = response.Diagnostics.Select(diag =>
+        foreach (var diag in response.Diagnostics)
         {
             var severity = diag.Severity.ToString().ToLowerInvariant();
-            return diag.Location != null
-                ? $"{diag.Location.FilePath}:{diag.Location.Line}:{diag.Location.Column}: {severity} {diag.Id}: {diag.Message}"
-                : $"{diag.Id}: {diag.Message}";
-        });
+            if (diag.Location != null)
+            {
+                lines.Add($"{diag.Location}: {severity} {diag.Id}: {diag.Message}");
+            }
+            else
+            {
+                lines.Add($"{diag.Id}: {diag.Message}");
+            }
+        }
+
         return string.Join(Environment.NewLine, lines);
     }
 
@@ -163,23 +175,6 @@ public static class OutputFormatter
         {
             lines.Add($"Process ID: {status.ProcessId}");
             lines.Add($"Responsive: {(status.IsResponsive ? "Yes" : "No")}");
-
-            if (status.IdleTimeoutMinutes.HasValue)
-            {
-                var timeoutDisplay = status.IdleTimeoutMinutes.Value == 0
-                    ? "Disabled"
-                    : $"{status.IdleTimeoutMinutes.Value:F0} minutes";
-                lines.Add($"Idle Timeout: {timeoutDisplay}");
-            }
-
-            if (status.IdleSeconds.HasValue)
-            {
-                var ts = TimeSpan.FromSeconds(status.IdleSeconds.Value);
-                var idleDisplay = ts.TotalMinutes >= 1
-                    ? $"{(int)ts.TotalMinutes}m {ts.Seconds}s"
-                    : $"{ts.TotalSeconds:F0}s";
-                lines.Add($"Idle: {idleDisplay}");
-            }
         }
 
         return string.Join(Environment.NewLine, lines);
