@@ -79,10 +79,19 @@ public static class DaemonManager
     {
         var daemonPath = GetDaemonPath();
 
+        // Use CLI's deps.json for dependency resolution when Daemon's own deps.json is missing
+        // (e.g., when installed as a dotnet tool where Daemon is bundled alongside CLI)
+        var daemonDir = Path.GetDirectoryName(daemonPath)!;
+        var daemonDepsPath = Path.Combine(daemonDir, "RoslynQuery.Daemon.deps.json");
+        var cliDepsPath = Path.Combine(daemonDir, "RoslynQuery.Cli.deps.json");
+        var depsArg = !File.Exists(daemonDepsPath) && File.Exists(cliDepsPath)
+            ? $"exec --depsfile \"{cliDepsPath}\" \"{daemonPath}\""
+            : $"\"{daemonPath}\"";
+
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"\"{daemonPath}\" \"{solutionPath}\"",
+            Arguments = $"{depsArg} \"{solutionPath}\"",
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,

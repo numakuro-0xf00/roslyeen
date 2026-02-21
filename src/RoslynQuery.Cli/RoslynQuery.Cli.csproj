@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RoslynQuery.Core\RoslynQuery.Core.csproj" />
+    <ProjectReference Include="..\RoslynQuery.Daemon\RoslynQuery.Daemon.csproj" />
   </ItemGroup>
 
   <ItemGroup>

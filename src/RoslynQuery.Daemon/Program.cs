@@ -35,6 +35,7 @@ public static class Program
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Fatal error: {ex.Message}");
+            Console.Error.WriteLine(ex.StackTrace);
             return 1;
         }
     }
