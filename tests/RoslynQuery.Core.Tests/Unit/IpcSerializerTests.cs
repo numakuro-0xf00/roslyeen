@@ -6,8 +6,10 @@ namespace RoslynQuery.Core.Tests.Unit;
 
 public class IpcSerializerTests
 {
+    #region Location serialization
+
     [Fact]
-    public void Serialize_Location_ProducesValidJson()
+    public void Serialize_Location_ProducesCorrectJsonStructure()
     {
         var location = new Location
         {
@@ -17,25 +19,80 @@ public class IpcSerializerTests
         };
 
         var json = IpcSerializer.Serialize(location);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
 
-        Assert.Contains("\"filePath\":", json);
-        Assert.Contains("\"src/MyClass.cs\"", json);
-        Assert.Contains("\"line\":10", json);
-        Assert.Contains("\"column\":5", json);
+        Assert.Equal("src/MyClass.cs", root.GetProperty("filePath").GetString());
+        Assert.Equal(10, root.GetProperty("line").GetInt32());
+        Assert.Equal(5, root.GetProperty("column").GetInt32());
     }
 
     [Fact]
-    public void Deserialize_Location_ReturnsCorrectObject()
+    public void Serialize_ThenDeserialize_Location_RoundTripsCorrectly()
     {
-        var json = "{\"filePath\":\"src/MyClass.cs\",\"line\":10,\"column\":5}";
+        var original = new Location
+        {
+            FilePath = "src/MyClass.cs",
+            Line = 10,
+            Column = 5,
+            EndLine = 10,
+            EndColumn = 15
+        };
 
-        var location = IpcSerializer.Deserialize<Location>(json);
+        var json = IpcSerializer.Serialize(original);
+        var deserialized = IpcSerializer.Deserialize<Location>(json);
 
-        Assert.NotNull(location);
-        Assert.Equal("src/MyClass.cs", location.FilePath);
-        Assert.Equal(10, location.Line);
-        Assert.Equal(5, location.Column);
+        Assert.NotNull(deserialized);
+        Assert.Equal(original.FilePath, deserialized.FilePath);
+        Assert.Equal(original.Line, deserialized.Line);
+        Assert.Equal(original.Column, deserialized.Column);
+        Assert.Equal(original.EndLine, deserialized.EndLine);
+        Assert.Equal(original.EndColumn, deserialized.EndColumn);
     }
+
+    [Fact]
+    public void Serialize_LocationWithNullOptionalFields_OmitsNullProperties()
+    {
+        var location = new Location
+        {
+            FilePath = "test.cs",
+            Line = 1,
+            Column = 1
+            // EndLine and EndColumn are null
+        };
+
+        var json = IpcSerializer.Serialize(location);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.False(root.TryGetProperty("endLine", out _), "endLine should be omitted when null");
+        Assert.False(root.TryGetProperty("endColumn", out _), "endColumn should be omitted when null");
+    }
+
+    #endregion
+
+    #region Enum serialization
+
+    [Fact]
+    public void Serialize_DiagnosticSeverityEnum_UsesCamelCase()
+    {
+        var info = new DiagnosticInfo
+        {
+            Id = "CS0001",
+            Severity = DiagnosticSeverity.Error,
+            Message = "test"
+        };
+
+        var json = IpcSerializer.Serialize(info);
+        using var doc = JsonDocument.Parse(json);
+        var severity = doc.RootElement.GetProperty("severity").GetString();
+
+        Assert.Equal("error", severity);
+    }
+
+    #endregion
+
+    #region JSON-RPC request/response
 
     [Fact]
     public void CreateRequest_ProducesValidJsonRpcRequest()
@@ -51,7 +108,7 @@ public class IpcSerializerTests
     }
 
     [Fact]
-    public void CreateSuccessResponse_ProducesValidJsonRpcResponse()
+    public void CreateSuccessResponse_HasResultAndNoError()
     {
         var result = new { Success = true };
 
@@ -65,7 +122,7 @@ public class IpcSerializerTests
     }
 
     [Fact]
-    public void CreateErrorResponse_ProducesValidJsonRpcResponse()
+    public void CreateErrorResponse_HasErrorAndNoResult()
     {
         var response = IpcSerializer.CreateErrorResponse(
             "123",
@@ -81,27 +138,44 @@ public class IpcSerializerTests
         Assert.False(response.IsSuccess);
     }
 
+    #endregion
+
+    #region Byte serialization
+
     [Fact]
-    public void SerializeToUtf8Bytes_ProducesValidBytes()
+    public void SerializeToUtf8Bytes_ThenDeserialize_RoundTripsCorrectly()
     {
-        var obj = new { Name = "test" };
+        var original = new Location
+        {
+            FilePath = "test.cs",
+            Line = 42,
+            Column = 7
+        };
 
-        var bytes = IpcSerializer.SerializeToUtf8Bytes(obj);
+        var bytes = IpcSerializer.SerializeToUtf8Bytes(original);
+        var deserialized = IpcSerializer.Deserialize<Location>(bytes);
 
-        Assert.NotEmpty(bytes);
-        var json = System.Text.Encoding.UTF8.GetString(bytes);
-        Assert.Contains("\"name\":\"test\"", json);
+        Assert.NotNull(deserialized);
+        Assert.Equal(original.FilePath, deserialized.FilePath);
+        Assert.Equal(original.Line, deserialized.Line);
+        Assert.Equal(original.Column, deserialized.Column);
     }
 
+    #endregion
+
+    #region ToJsonElement
+
     [Fact]
-    public void ToJsonElement_ProducesValidElement()
+    public void ToJsonElement_PreservesStructure()
     {
-        var obj = new { Value = 42 };
+        var obj = new { Value = 42, Name = "test" };
 
         var element = IpcSerializer.ToJsonElement(obj);
 
         Assert.Equal(JsonValueKind.Object, element.ValueKind);
-        Assert.True(element.TryGetProperty("value", out var valueProp));
-        Assert.Equal(42, valueProp.GetInt32());
+        Assert.Equal(42, element.GetProperty("value").GetInt32());
+        Assert.Equal("test", element.GetProperty("name").GetString());
     }
+
+    #endregion
 }

@@ -22,11 +22,11 @@ namespace RoslynQuery.Core.Queries;
 /// </summary>
 public class QueryExecutor : IQueryService
 {
-    private readonly SolutionManager _solutionManager;
+    private readonly ISolutionProvider _solutionProvider;
 
-    public QueryExecutor(SolutionManager solutionManager)
+    public QueryExecutor(ISolutionProvider solutionProvider)
     {
-        _solutionManager = solutionManager ?? throw new ArgumentNullException(nameof(solutionManager));
+        _solutionProvider = solutionProvider ?? throw new ArgumentNullException(nameof(solutionProvider));
     }
 
     public async Task<QueryResult<LocationResponse>> GetDefinitionAsync(
@@ -101,7 +101,7 @@ public class QueryExecutor : IQueryService
                 "No symbol found at the specified position");
         }
 
-        var solution = _solutionManager.GetSolution();
+        var solution = _solutionProvider.GetSolution();
         var implementations = await SymbolFinder.FindImplementationsAsync(
             symbol, solution, cancellationToken: cancellationToken);
 
@@ -129,7 +129,7 @@ public class QueryExecutor : IQueryService
                 "No symbol found at the specified position");
         }
 
-        var solution = _solutionManager.GetSolution();
+        var solution = _solutionProvider.GetSolution();
         var references = await SymbolFinder.FindReferencesAsync(
             symbol, solution, cancellationToken: cancellationToken);
 
@@ -176,7 +176,7 @@ public class QueryExecutor : IQueryService
                 "No symbol found at the specified position");
         }
 
-        var solution = _solutionManager.GetSolution();
+        var solution = _solutionProvider.GetSolution();
         var callers = await SymbolFinder.FindCallersAsync(
             symbol, solution, cancellationToken: cancellationToken);
 
@@ -236,7 +236,7 @@ public class QueryExecutor : IQueryService
             var syntaxTree = syntaxNode.SyntaxTree;
 
             // Find the document containing this syntax tree
-            var doc = _solutionManager.GetSolution().GetDocument(syntaxTree);
+            var doc = _solutionProvider.GetSolution().GetDocument(syntaxTree);
             if (doc == null) continue;
 
             var semanticModel = await doc.GetSemanticModelAsync(cancellationToken);
@@ -321,13 +321,13 @@ public class QueryExecutor : IQueryService
         DiagnosticsRequest request,
         CancellationToken cancellationToken = default)
     {
-        var solution = _solutionManager.GetSolution();
+        var solution = _solutionProvider.GetSolution();
         var allDiagnostics = new List<DiagnosticInfo>();
 
         if (!string.IsNullOrEmpty(request.FilePath))
         {
             // Get diagnostics for a specific file
-            var document = _solutionManager.FindDocument(request.FilePath);
+            var document = _solutionProvider.FindDocument(request.FilePath);
             if (document == null)
             {
                 return QueryResult<DiagnosticsResponse>.Fail(
@@ -369,7 +369,7 @@ public class QueryExecutor : IQueryService
         PositionRequest request,
         CancellationToken cancellationToken)
     {
-        var document = _solutionManager.FindDocument(request.FilePath);
+        var document = _solutionProvider.FindDocument(request.FilePath);
         if (document == null)
         {
             return (null, null);
@@ -392,7 +392,7 @@ public class QueryExecutor : IQueryService
         }
 
         var lineSpan = location.GetLineSpan();
-        var filePath = PathResolver.ToRelativePath(lineSpan.Path, _solutionManager.SolutionRoot);
+        var filePath = PathResolver.ToRelativePath(lineSpan.Path, _solutionProvider.SolutionRoot);
 
         return new SourceLocation
         {
@@ -424,7 +424,7 @@ public class QueryExecutor : IQueryService
         }
 
         var lineSpan = refLocation.Location.GetLineSpan();
-        var filePath = PathResolver.ToRelativePath(lineSpan.Path, _solutionManager.SolutionRoot);
+        var filePath = PathResolver.ToRelativePath(lineSpan.Path, _solutionProvider.SolutionRoot);
 
         // Get snippet
         string? snippet = null;
@@ -480,7 +480,7 @@ public class QueryExecutor : IQueryService
         }
 
         var lineSpan = location.GetLineSpan();
-        var filePath = PathResolver.ToRelativePath(lineSpan.Path, _solutionManager.SolutionRoot);
+        var filePath = PathResolver.ToRelativePath(lineSpan.Path, _solutionProvider.SolutionRoot);
 
         return new RefLocation
         {
@@ -593,7 +593,7 @@ public class QueryExecutor : IQueryService
                 var lineSpan = diagnostic.Location.GetLineSpan();
                 location = new SourceLocation
                 {
-                    FilePath = PathResolver.ToRelativePath(lineSpan.Path, _solutionManager.SolutionRoot),
+                    FilePath = PathResolver.ToRelativePath(lineSpan.Path, _solutionProvider.SolutionRoot),
                     Line = lineSpan.StartLinePosition.Line + 1,
                     Column = lineSpan.StartLinePosition.Character + 1
                 };

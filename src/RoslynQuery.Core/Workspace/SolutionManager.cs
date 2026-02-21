@@ -8,7 +8,7 @@ namespace RoslynQuery.Core.Workspace;
 /// <summary>
 /// Manages the loaded solution and provides incremental updates.
 /// </summary>
-public sealed class SolutionManager : IDisposable
+public sealed class SolutionManager : ISolutionProvider, IDisposable
 {
     private readonly string _solutionPath;
     private readonly string _solutionRoot;
