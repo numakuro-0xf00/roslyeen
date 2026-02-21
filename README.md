@@ -34,17 +34,16 @@ dotnet tool uninstall --global RoslynQuery
 ## クイックスタート
 
 ```bash
-# 1. デーモンを起動（ソリューションをロード）
-roslyn-query init -s MyProject.sln
-
-# 2. コードナビゲーションを実行
-roslyn-query definition src/Foo.cs 42 15
+# コードナビゲーションを実行（デーモンは自動起動されます）
+roslyn-query definition src/Foo.cs 42 15 -s MyProject.sln
 roslyn-query references src/Foo.cs 42 15
 roslyn-query callers src/Foo.cs 42 15
 
-# 3. デーモンを停止
+# デーモンを停止
 roslyn-query shutdown
 ```
+
+> **Note:** デーモンは任意のクエリコマンド実行時に自動起動されます。`roslyn-query init` で事前にウォームアップすることもできますが、必須ではありません。
 
 ## グローバルオプション
 
@@ -221,9 +220,9 @@ roslyn-query diagnostics src/Foo.cs --info
 
 ### 管理
 
-#### `init` - デーモン起動
+#### `init` - デーモン起動（オプション）
 
-ソリューションをロードしてデーモンプロセスを起動します。
+ソリューションをロードしてデーモンプロセスを事前起動します。任意のクエリコマンドもデーモンを自動起動するため、このコマンドは必須ではありません。初回クエリの待ち時間を避けたい場合のウォームアップ用です。
 
 ```bash
 roslyn-query init -s <solution-path>

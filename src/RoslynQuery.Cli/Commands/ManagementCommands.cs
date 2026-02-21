@@ -14,7 +14,7 @@ public class InitCommand : CommandBase
         DefaultValueFactory = _ => 30
     };
 
-    public InitCommand() : base("init", "Start the daemon for a solution")
+    public InitCommand() : base("init", "Pre-warm the daemon (optional - any command auto-starts the daemon)")
     {
         Options.Add(IdleTimeoutOption);
 
@@ -42,40 +42,22 @@ public class InitCommand : CommandBase
             var status = await DaemonManager.GetStatusAsync(solutionPath);
             if (status.IsRunning && status.IsResponsive)
             {
-                var msg = $"Daemon already running for {solutionPath} (PID: {status.ProcessId})";
                 if (json)
                 {
                     Console.WriteLine($"{{\"status\": \"already_running\", \"pid\": {status.ProcessId}}}");
                 }
                 else
                 {
-                    Console.WriteLine(msg);
+                    Console.WriteLine($"Daemon already running for {solutionPath} (PID: {status.ProcessId})");
                 }
                 return 0;
             }
 
-            // Start daemon
-            WriteVerbose(verbose, "Starting daemon...");
-            await DaemonManager.StartDaemonAsync(solutionPath, idleTimeoutMinutes, cancellationToken);
+            // Start daemon and wait for it to be ready (reuses shared logic)
+            await using var client = await DaemonManager.GetOrStartDaemonAsync(
+                solutionPath, idleTimeoutMinutes: idleTimeoutMinutes, cancellationToken: cancellationToken);
 
-            // Wait for it to be ready
-            var maxWait = 30;
-            for (var i = 0; i < maxWait; i++)
-            {
-                await Task.Delay(1000, cancellationToken);
-                status = await DaemonManager.GetStatusAsync(solutionPath);
-                if (status.IsRunning && status.IsResponsive)
-                {
-                    break;
-                }
-                WriteVerbose(verbose, "Waiting for daemon to be ready...");
-            }
-
-            if (!status.IsRunning || !status.IsResponsive)
-            {
-                Console.Error.WriteLine("Failed to start daemon");
-                return 4;
-            }
+            status = await DaemonManager.GetStatusAsync(solutionPath);
 
             if (json)
             {

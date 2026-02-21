@@ -87,7 +87,7 @@ roslyn-query
 │   ├── unused              # Unused code detection
 │   └── type-check          # Type compatibility check
 └── Management
-    ├── init                # Start daemon
+    ├── init                # Pre-warm daemon (optional)
     ├── status              # Check status
     └── shutdown            # Stop daemon
 ```

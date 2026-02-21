@@ -44,16 +44,33 @@ public static class DaemonManager
         }
 
         // Start new daemon
-        await StartDaemonAsync(solutionPath, idleTimeoutMinutes, cancellationToken);
+        var solutionName = Path.GetFileName(solutionPath);
+        Console.Error.WriteLine($"Starting daemon for {solutionName}...");
+
+        var process = await StartDaemonAsync(solutionPath, idleTimeoutMinutes, cancellationToken);
+
+        // Start reading stderr in background for error reporting
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
 
         // Wait for daemon to be ready
         var client2 = new IpcClient(socketPath);
         var connected = false;
         var maxAttempts = 30; // 30 seconds max
+        var sw = Stopwatch.StartNew();
 
         for (var i = 0; i < maxAttempts && !connected; i++)
         {
             await Task.Delay(1000, cancellationToken);
+
+            // Check if daemon crashed during startup
+            if (process.HasExited)
+            {
+                await client2.DisposeAsync();
+                var stderr = await stderrTask;
+                var detail = string.IsNullOrWhiteSpace(stderr) ? "" : $"\n{stderr}";
+                throw new InvalidOperationException(
+                    $"Daemon process exited during startup (exit code {process.ExitCode}){detail}");
+            }
 
             try
             {
@@ -65,7 +82,26 @@ public static class DaemonManager
                 if (i == maxAttempts - 1)
                 {
                     await client2.DisposeAsync();
-                    throw new InvalidOperationException("Failed to connect to daemon after starting");
+                    // Timeout - kill process and capture stderr
+                    try
+                    {
+                        process.Kill();
+                        await process.WaitForExitAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        // Ignore kill errors
+                    }
+                    var stderr = await stderrTask;
+                    var detail = string.IsNullOrWhiteSpace(stderr) ? "" : $"\n{stderr}";
+                    throw new InvalidOperationException(
+                        $"Failed to connect to daemon after {maxAttempts}s{detail}");
+                }
+
+                // Progress message every 5 seconds
+                if (sw.Elapsed.TotalSeconds >= 5 && i % 5 == 4)
+                {
+                    Console.Error.WriteLine($"Waiting for daemon to be ready... ({(int)sw.Elapsed.TotalSeconds}s)");
                 }
             }
         }
@@ -74,9 +110,10 @@ public static class DaemonManager
     }
 
     /// <summary>
-    /// Start the daemon for the given solution.
+    /// Start the daemon for the given solution. Returns the started Process
+    /// so callers can monitor it and read stderr on failure.
     /// </summary>
-    public static async Task StartDaemonAsync(string solutionPath, int idleTimeoutMinutes = 30, CancellationToken cancellationToken = default)
+    public static async Task<Process> StartDaemonAsync(string solutionPath, int idleTimeoutMinutes = 30, CancellationToken cancellationToken = default)
     {
         var daemonPath = GetDaemonPath();
 
@@ -114,6 +151,8 @@ public static class DaemonManager
             var error = await process.StandardError.ReadToEndAsync(cancellationToken);
             throw new InvalidOperationException($"Daemon exited immediately: {error}");
         }
+
+        return process;
     }
 
     /// <summary>
