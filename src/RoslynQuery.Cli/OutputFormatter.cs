@@ -163,6 +163,23 @@ public static class OutputFormatter
         {
             lines.Add($"Process ID: {status.ProcessId}");
             lines.Add($"Responsive: {(status.IsResponsive ? "Yes" : "No")}");
+
+            if (status.IdleTimeoutMinutes.HasValue)
+            {
+                var timeoutDisplay = status.IdleTimeoutMinutes.Value == 0
+                    ? "Disabled"
+                    : $"{status.IdleTimeoutMinutes.Value:F0} minutes";
+                lines.Add($"Idle Timeout: {timeoutDisplay}");
+            }
+
+            if (status.IdleSeconds.HasValue)
+            {
+                var ts = TimeSpan.FromSeconds(status.IdleSeconds.Value);
+                var idleDisplay = ts.TotalMinutes >= 1
+                    ? $"{(int)ts.TotalMinutes}m {ts.Seconds}s"
+                    : $"{ts.TotalSeconds:F0}s";
+                lines.Add($"Idle: {idleDisplay}");
+            }
         }
 
         return string.Join(Environment.NewLine, lines);

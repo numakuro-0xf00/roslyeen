@@ -8,20 +8,29 @@ namespace RoslynQuery.Cli.Commands;
 /// </summary>
 public class InitCommand : CommandBase
 {
+    private static readonly Option<int> IdleTimeoutOption = new("--idle-timeout")
+    {
+        Description = "Idle timeout in minutes before auto-shutdown (0 to disable, default: 30)",
+        DefaultValueFactory = _ => 30
+    };
+
     public InitCommand() : base("init", "Start the daemon for a solution")
     {
+        Options.Add(IdleTimeoutOption);
+
         this.SetAction(async (parseResult, cancellationToken) =>
         {
             var solution = GetSolution(parseResult);
             var json = GetJson(parseResult);
             var verbose = GetVerbose(parseResult);
+            var idleTimeout = parseResult.GetValue(IdleTimeoutOption);
 
-            return await ExecuteAsync(solution, json, verbose, cancellationToken);
+            return await ExecuteAsync(solution, json, verbose, idleTimeout, cancellationToken);
         });
     }
 
     private static async Task<int> ExecuteAsync(
-        string? solution, bool json, bool verbose,
+        string? solution, bool json, bool verbose, int idleTimeoutMinutes,
         CancellationToken cancellationToken)
     {
         try
@@ -47,7 +56,7 @@ public class InitCommand : CommandBase
 
             // Start daemon
             WriteVerbose(verbose, "Starting daemon...");
-            await DaemonManager.StartDaemonAsync(solutionPath, cancellationToken);
+            await DaemonManager.StartDaemonAsync(solutionPath, idleTimeoutMinutes, cancellationToken);
 
             // Wait for it to be ready
             var maxWait = 30;

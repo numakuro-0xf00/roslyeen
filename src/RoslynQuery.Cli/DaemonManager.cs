@@ -15,6 +15,7 @@ public static class DaemonManager
     public static async Task<IpcClient> GetOrStartDaemonAsync(
         string solutionPath,
         bool autoStart = true,
+        int idleTimeoutMinutes = 30,
         CancellationToken cancellationToken = default)
     {
         var socketPath = PathResolver.GetSocketPath(solutionPath);
@@ -43,7 +44,7 @@ public static class DaemonManager
         }
 
         // Start new daemon
-        await StartDaemonAsync(solutionPath, cancellationToken);
+        await StartDaemonAsync(solutionPath, idleTimeoutMinutes, cancellationToken);
 
         // Wait for daemon to be ready
         var client2 = new IpcClient(socketPath);
@@ -75,7 +76,7 @@ public static class DaemonManager
     /// <summary>
     /// Start the daemon for the given solution.
     /// </summary>
-    public static async Task StartDaemonAsync(string solutionPath, CancellationToken cancellationToken = default)
+    public static async Task StartDaemonAsync(string solutionPath, int idleTimeoutMinutes = 30, CancellationToken cancellationToken = default)
     {
         var daemonPath = GetDaemonPath();
 
@@ -91,7 +92,7 @@ public static class DaemonManager
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"{depsArg} \"{solutionPath}\"",
+            Arguments = $"{depsArg} \"{solutionPath}\" --idle-timeout {idleTimeoutMinutes}",
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
@@ -197,6 +198,19 @@ public static class DaemonManager
                 await client.ConnectAsync();
                 var response = await client.SendRequestAsync("ping");
                 status.IsResponsive = response.IsSuccess;
+
+                if (response.IsSuccess && response.Result.HasValue)
+                {
+                    var result = response.Result.Value;
+                    if (result.TryGetProperty("idleTimeoutMinutes", out var timeoutEl))
+                    {
+                        status.IdleTimeoutMinutes = timeoutEl.GetDouble();
+                    }
+                    if (result.TryGetProperty("idleSeconds", out var idleEl))
+                    {
+                        status.IdleSeconds = idleEl.GetDouble();
+                    }
+                }
             }
             catch
             {
@@ -284,4 +298,6 @@ public class DaemonStatus
     public bool IsRunning { get; set; }
     public bool IsResponsive { get; set; }
     public int? ProcessId { get; set; }
+    public double? IdleTimeoutMinutes { get; set; }
+    public double? IdleSeconds { get; set; }
 }
