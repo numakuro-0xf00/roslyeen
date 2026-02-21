@@ -68,7 +68,7 @@ public class DefinitionCommand : CommandBase
                 client, "definition", request, cancellationToken);
 
             var format = GetOutputFormat(json);
-            Console.WriteLine(OutputFormatter.FormatLocation(result?.Data, format));
+            WriteOutput(OutputFormatter.FormatLocation(result?.Data, format), "No definition found.", format);
 
             return result?.Success == true ? 0 : 1;
         }
@@ -139,7 +139,7 @@ public class BaseDefinitionCommand : CommandBase
                 client, "base-definition", request, cancellationToken);
 
             var format = GetOutputFormat(json);
-            Console.WriteLine(OutputFormatter.FormatLocation(result?.Data, format));
+            WriteOutput(OutputFormatter.FormatLocation(result?.Data, format), "No base definition found.", format);
 
             return result?.Success == true ? 0 : 1;
         }
@@ -210,7 +210,7 @@ public class ImplementationsCommand : CommandBase
                 client, "implementations", request, cancellationToken);
 
             var format = GetOutputFormat(json);
-            Console.WriteLine(OutputFormatter.FormatLocations(result?.Data, format));
+            WriteOutput(OutputFormatter.FormatLocations(result?.Data, format), "No implementations found.", format);
 
             return result?.Success == true ? 0 : 1;
         }

@@ -13,13 +13,11 @@ public static class OutputFormatter
     /// <summary>
     /// Format a location response.
     /// </summary>
-    public static string FormatLocation(LocationResponse? response, OutputFormat format)
+    public static string? FormatLocation(LocationResponse? response, OutputFormat format)
     {
         if (response?.Location == null)
         {
-            return format == OutputFormat.Json
-                ? "{\"location\": null}"
-                : "No location found";
+            return format == OutputFormat.Json ? "{\"location\": null}" : null;
         }
 
         if (format == OutputFormat.Json)
@@ -27,19 +25,17 @@ public static class OutputFormatter
             return IpcSerializer.Serialize(response);
         }
 
-        return $"{response.Location} ({response.SymbolKind}: {response.SymbolName})";
+        return response.Location.ToString();
     }
 
     /// <summary>
     /// Format a locations response.
     /// </summary>
-    public static string FormatLocations(LocationsResponse? response, OutputFormat format)
+    public static string? FormatLocations(LocationsResponse? response, OutputFormat format)
     {
         if (response == null || response.Locations.Count == 0)
         {
-            return format == OutputFormat.Json
-                ? "{\"locations\": [], \"count\": 0}"
-                : "No locations found";
+            return format == OutputFormat.Json ? "{\"locations\": [], \"count\": 0}" : null;
         }
 
         if (format == OutputFormat.Json)
@@ -47,41 +43,17 @@ public static class OutputFormatter
             return IpcSerializer.Serialize(response);
         }
 
-        var lines = new List<string>
-        {
-            $"Found {response.Count} location(s) for '{response.SymbolName}':",
-            ""
-        };
-
-        foreach (var loc in response.Locations)
-        {
-            var context = loc.ContainingMember != null
-                ? $" (in {loc.ContainingType}.{loc.ContainingMember})"
-                : loc.ContainingType != null
-                    ? $" (in {loc.ContainingType})"
-                    : "";
-
-            lines.Add($"  {loc.Location}{context}");
-
-            if (!string.IsNullOrEmpty(loc.Snippet))
-            {
-                lines.Add($"    {loc.Snippet}");
-            }
-        }
-
-        return string.Join(Environment.NewLine, lines);
+        return string.Join(Environment.NewLine, response.Locations.Select(loc => loc.Location.ToString()));
     }
 
     /// <summary>
     /// Format a symbol info response.
     /// </summary>
-    public static string FormatSymbolInfo(SymbolInfoResponse? response, OutputFormat format)
+    public static string? FormatSymbolInfo(SymbolInfoResponse? response, OutputFormat format)
     {
         if (response == null)
         {
-            return format == OutputFormat.Json
-                ? "{\"symbol\": null}"
-                : "No symbol found";
+            return format == OutputFormat.Json ? "{\"symbol\": null}" : null;
         }
 
         if (format == OutputFormat.Json)
@@ -142,13 +114,11 @@ public static class OutputFormatter
     /// <summary>
     /// Format a diagnostics response.
     /// </summary>
-    public static string FormatDiagnostics(DiagnosticsResponse? response, OutputFormat format)
+    public static string? FormatDiagnostics(DiagnosticsResponse? response, OutputFormat format)
     {
         if (response == null)
         {
-            return format == OutputFormat.Json
-                ? "{\"diagnostics\": []}"
-                : "No diagnostics";
+            return format == OutputFormat.Json ? "{\"diagnostics\": []}" : null;
         }
 
         if (format == OutputFormat.Json)
@@ -158,23 +128,16 @@ public static class OutputFormatter
 
         if (response.Diagnostics.Count == 0)
         {
-            return "No diagnostics found";
+            return null;
         }
 
-        var lines = new List<string>
+        var lines = response.Diagnostics.Select(diag =>
         {
-            $"Found {response.Diagnostics.Count} diagnostic(s):",
-            $"  Errors: {response.ErrorCount}, Warnings: {response.WarningCount}, Info: {response.InfoCount}",
-            ""
-        };
-
-        foreach (var diag in response.Diagnostics)
-        {
-            var severity = diag.Severity.ToString().ToUpperInvariant();
-            var location = diag.Location != null ? $" at {diag.Location}" : "";
-            lines.Add($"  [{severity}] {diag.Id}: {diag.Message}{location}");
-        }
-
+            var severity = diag.Severity.ToString().ToLowerInvariant();
+            return diag.Location != null
+                ? $"{diag.Location.FilePath}:{diag.Location.Line}:{diag.Location.Column}: {severity} {diag.Id}: {diag.Message}"
+                : $"{diag.Id}: {diag.Message}";
+        });
         return string.Join(Environment.NewLine, lines);
     }
 

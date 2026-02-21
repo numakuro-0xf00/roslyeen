@@ -13,7 +13,7 @@ public abstract class CommandBase : Command
 {
     protected static readonly Option<string?> SolutionOption = new("--solution", "-s")
     {
-        Description = "Path to the solution file. If not specified, searches for .sln in current directory and parents."
+        Description = "Path to the solution file. If not specified, uses ROSLYN_QUERY_SOLUTION env var, then searches for .sln in current directory and parents."
     };
 
     protected static readonly Option<bool> JsonOption = new("--json")
@@ -39,17 +39,21 @@ public abstract class CommandBase : Command
         if (!string.IsNullOrEmpty(solutionPath))
         {
             if (!File.Exists(solutionPath))
-            {
                 throw new FileNotFoundException($"Solution file not found: {solutionPath}");
-            }
             return Path.GetFullPath(solutionPath);
+        }
+
+        var envSolution = Environment.GetEnvironmentVariable("ROSLYN_QUERY_SOLUTION");
+        if (!string.IsNullOrEmpty(envSolution))
+        {
+            if (!File.Exists(envSolution))
+                throw new FileNotFoundException($"Solution file from ROSLYN_QUERY_SOLUTION not found: {envSolution}");
+            return Path.GetFullPath(envSolution);
         }
 
         var found = PathResolver.FindSolutionFile(Environment.CurrentDirectory);
         if (found == null)
-        {
-            throw new FileNotFoundException("No solution file found. Specify --solution or run from a directory with a .sln file.");
-        }
+            throw new FileNotFoundException("No solution file found. Specify --solution, set ROSLYN_QUERY_SOLUTION, or run from a directory with a .sln file.");
 
         return found;
     }
@@ -62,6 +66,18 @@ public abstract class CommandBase : Command
         if (verbose)
         {
             Console.Error.WriteLine(message);
+        }
+    }
+
+    protected static void WriteOutput(string? output, string noResultMessage, OutputFormat format)
+    {
+        if (output != null)
+        {
+            Console.WriteLine(output);
+        }
+        else if (format != OutputFormat.Json)
+        {
+            Console.Error.WriteLine(noResultMessage);
         }
     }
 

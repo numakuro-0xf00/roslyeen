@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\RoslynQuery.Core\RoslynQuery.Core.csproj" />
+    <ProjectReference Include="..\..\src\RoslynQuery.Cli\RoslynQuery.Cli.csproj" />
   </ItemGroup>
 
 </Project>
