@@ -5,6 +5,7 @@ Roslyn ベースの C# コードナビゲーション CLI ツール。CLI 上で
 ## 必要環境
 
 - [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- .NET Framework プロジェクトを解析する場合は Visual Studio 2022 または Build Tools for Visual Studio 2022
 
 ## インストール
 
