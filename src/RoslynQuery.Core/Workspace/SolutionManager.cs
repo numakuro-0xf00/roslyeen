@@ -14,7 +14,7 @@ public sealed class SolutionManager : ISolutionProvider, IDisposable
     private readonly string _solutionRoot;
     private MSBuildWorkspace? _workspace;
     private Solution? _solution;
-    private readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly ReaderWriterLockSlim _lock = new();
     private bool _disposed;
 
     public SolutionManager(string solutionPath)
@@ -48,7 +48,7 @@ public sealed class SolutionManager : ISolutionProvider, IDisposable
         // Ensure MSBuild is initialized before creating workspace
         MsBuildInitializer.EnsureInitialized();
 
-        await _lock.WaitAsync(cancellationToken);
+        _lock.EnterWriteLock();
         try
         {
             // Dispose previous workspace if reloading
@@ -61,7 +61,7 @@ public sealed class SolutionManager : ISolutionProvider, IDisposable
         }
         finally
         {
-            _lock.Release();
+            _lock.ExitWriteLock();
         }
     }
 
@@ -72,14 +72,14 @@ public sealed class SolutionManager : ISolutionProvider, IDisposable
     {
         ThrowIfDisposed();
 
-        _lock.Wait();
+        _lock.EnterReadLock();
         try
         {
             return _solution ?? throw new InvalidOperationException("Solution not loaded");
         }
         finally
         {
-            _lock.Release();
+            _lock.ExitReadLock();
         }
     }
 
@@ -92,7 +92,7 @@ public sealed class SolutionManager : ISolutionProvider, IDisposable
 
         var absolutePath = PathResolver.ToAbsolutePath(filePath, _solutionRoot);
 
-        await _lock.WaitAsync(cancellationToken);
+        _lock.EnterWriteLock();
         try
         {
             if (_solution == null)
@@ -109,10 +109,12 @@ public sealed class SolutionManager : ISolutionProvider, IDisposable
 
             var sourceText = SourceText.From(content);
             _solution = _solution.WithDocumentText(documentId, sourceText);
+
+            await Task.CompletedTask; // Placeholder for any async work
         }
         finally
         {
-            _lock.Release();
+            _lock.ExitWriteLock();
         }
     }
 
@@ -141,7 +143,7 @@ public sealed class SolutionManager : ISolutionProvider, IDisposable
 
         var absolutePath = PathResolver.ToAbsolutePath(filePath, _solutionRoot);
 
-        _lock.Wait();
+        _lock.EnterReadLock();
         try
         {
             if (_solution == null)
@@ -167,7 +169,7 @@ public sealed class SolutionManager : ISolutionProvider, IDisposable
         }
         finally
         {
-            _lock.Release();
+            _lock.ExitReadLock();
         }
     }
 
@@ -178,14 +180,14 @@ public sealed class SolutionManager : ISolutionProvider, IDisposable
     {
         ThrowIfDisposed();
 
-        _lock.Wait();
+        _lock.EnterReadLock();
         try
         {
             return _solution?.Projects.ToList() ?? [];
         }
         finally
         {
-            _lock.Release();
+            _lock.ExitReadLock();
         }
     }
 

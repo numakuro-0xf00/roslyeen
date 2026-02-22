@@ -8,29 +8,20 @@ namespace RoslynQuery.Cli.Commands;
 /// </summary>
 public class InitCommand : CommandBase
 {
-    private static readonly Option<int> IdleTimeoutOption = new("--idle-timeout")
+    public InitCommand() : base("init", "Start the daemon for a solution")
     {
-        Description = "Idle timeout in minutes before auto-shutdown (0 to disable, default: 30)",
-        DefaultValueFactory = _ => 30
-    };
-
-    public InitCommand() : base("init", "Pre-warm the daemon (optional - any command auto-starts the daemon)")
-    {
-        Options.Add(IdleTimeoutOption);
-
         this.SetAction(async (parseResult, cancellationToken) =>
         {
             var solution = GetSolution(parseResult);
             var json = GetJson(parseResult);
             var verbose = GetVerbose(parseResult);
-            var idleTimeout = parseResult.GetValue(IdleTimeoutOption);
 
-            return await ExecuteAsync(solution, json, verbose, idleTimeout, cancellationToken);
+            return await ExecuteAsync(solution, json, verbose, cancellationToken);
         });
     }
 
     private static async Task<int> ExecuteAsync(
-        string? solution, bool json, bool verbose, int idleTimeoutMinutes,
+        string? solution, bool json, bool verbose,
         CancellationToken cancellationToken)
     {
         try
@@ -42,22 +33,40 @@ public class InitCommand : CommandBase
             var status = await DaemonManager.GetStatusAsync(solutionPath);
             if (status.IsRunning && status.IsResponsive)
             {
+                var msg = $"Daemon already running for {solutionPath} (PID: {status.ProcessId})";
                 if (json)
                 {
                     Console.WriteLine($"{{\"status\": \"already_running\", \"pid\": {status.ProcessId}}}");
                 }
                 else
                 {
-                    Console.WriteLine($"Daemon already running for {solutionPath} (PID: {status.ProcessId})");
+                    Console.WriteLine(msg);
                 }
                 return 0;
             }
 
-            // Start daemon and wait for it to be ready (reuses shared logic)
-            await using var client = await DaemonManager.GetOrStartDaemonAsync(
-                solutionPath, idleTimeoutMinutes: idleTimeoutMinutes, cancellationToken: cancellationToken);
+            // Start daemon
+            WriteVerbose(verbose, "Starting daemon...");
+            await DaemonManager.StartDaemonAsync(solutionPath, cancellationToken);
 
-            status = await DaemonManager.GetStatusAsync(solutionPath);
+            // Wait for it to be ready
+            var maxWait = 30;
+            for (var i = 0; i < maxWait; i++)
+            {
+                await Task.Delay(1000, cancellationToken);
+                status = await DaemonManager.GetStatusAsync(solutionPath);
+                if (status.IsRunning && status.IsResponsive)
+                {
+                    break;
+                }
+                WriteVerbose(verbose, "Waiting for daemon to be ready...");
+            }
+
+            if (!status.IsRunning || !status.IsResponsive)
+            {
+                Console.Error.WriteLine("Failed to start daemon");
+                return 4;
+            }
 
             if (json)
             {

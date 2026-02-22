@@ -14,28 +14,16 @@ public sealed class IpcServer : IAsyncDisposable
 {
     private readonly string _socketPath;
     private readonly IQueryService _queryService;
-    private readonly TimeSpan _idleTimeout;
-    private DateTime _lastActivity = DateTime.UtcNow;
-    private readonly object _activityLock = new();
     private Socket? _listenSocket;
     private readonly CancellationTokenSource _cts = new();
     private readonly List<Task> _clientTasks = [];
     private readonly object _clientLock = new();
     private bool _disposed;
 
-    public IpcServer(string socketPath, IQueryService queryService, TimeSpan? idleTimeout = null)
+    public IpcServer(string socketPath, IQueryService queryService)
     {
         _socketPath = socketPath ?? throw new ArgumentNullException(nameof(socketPath));
         _queryService = queryService ?? throw new ArgumentNullException(nameof(queryService));
-        _idleTimeout = idleTimeout ?? Timeout.InfiniteTimeSpan;
-    }
-
-    /// <summary>
-    /// Record activity to reset the idle timer.
-    /// </summary>
-    public void RecordActivity()
-    {
-        lock (_activityLock) { _lastActivity = DateTime.UtcNow; }
     }
 
     /// <summary>
@@ -157,7 +145,6 @@ public sealed class IpcServer : IAsyncDisposable
 
     private async Task<JsonRpcResponse> HandleRequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        RecordActivity();
         try
         {
             return request.Method switch
@@ -292,16 +279,9 @@ public sealed class IpcServer : IAsyncDisposable
             : IpcSerializer.CreateErrorResponse(request.Id, JsonRpcErrorCodes.InternalError, result.ErrorMessage ?? "Failed to get diagnostics");
     }
 
-    private JsonRpcResponse CreatePingResponse(string id)
+    private static JsonRpcResponse CreatePingResponse(string id)
     {
-        DateTime lastActivity;
-        lock (_activityLock) { lastActivity = _lastActivity; }
-        return IpcSerializer.CreateSuccessResponse(id, new
-        {
-            status = "ok",
-            idleTimeoutMinutes = _idleTimeout == Timeout.InfiniteTimeSpan ? 0 : _idleTimeout.TotalMinutes,
-            idleSeconds = Math.Round((DateTime.UtcNow - lastActivity).TotalSeconds, 1)
-        });
+        return IpcSerializer.CreateSuccessResponse(id, new { status = "ok" });
     }
 
     private JsonRpcResponse HandleShutdown(string id)
@@ -356,28 +336,13 @@ public sealed class IpcServer : IAsyncDisposable
     /// </summary>
     public async Task WaitForShutdownAsync()
     {
-        if (_idleTimeout == Timeout.InfiniteTimeSpan)
+        try
         {
-            try { await Task.Delay(Timeout.Infinite, _cts.Token); }
-            catch (OperationCanceledException) { }
-            return;
+            await Task.Delay(Timeout.Infinite, _cts.Token);
         }
-
-        var checkInterval = TimeSpan.FromSeconds(Math.Min(60, _idleTimeout.TotalSeconds));
-        while (!_cts.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            DateTime lastActivity;
-            lock (_activityLock) { lastActivity = _lastActivity; }
-
-            if (DateTime.UtcNow - lastActivity >= _idleTimeout)
-            {
-                Console.Error.WriteLine($"Idle timeout ({_idleTimeout.TotalMinutes:F0} min) reached. Shutting down.");
-                try { await _cts.CancelAsync(); } catch { }
-                break;
-            }
-
-            try { await Task.Delay(checkInterval, _cts.Token); }
-            catch (OperationCanceledException) { break; }
+            // Expected
         }
     }
 

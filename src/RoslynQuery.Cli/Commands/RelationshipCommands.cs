@@ -63,7 +63,7 @@ public class ReferencesCommand : CommandBase
                 client, "references", request, cancellationToken);
 
             var format = GetOutputFormat(json);
-            WriteOutput(OutputFormatter.FormatLocations(result?.Data, format), "No references found.", format);
+            Console.WriteLine(OutputFormatter.FormatLocations(result?.Data, format));
 
             return result?.Success == true ? 0 : 1;
         }
@@ -123,7 +123,7 @@ public class CallersCommand : CommandBase
                 client, "callers", request, cancellationToken);
 
             var format = GetOutputFormat(json);
-            WriteOutput(OutputFormatter.FormatLocations(result?.Data, format), "No callers found.", format);
+            Console.WriteLine(OutputFormatter.FormatLocations(result?.Data, format));
 
             return result?.Success == true ? 0 : 1;
         }
@@ -183,7 +183,7 @@ public class CalleesCommand : CommandBase
                 client, "callees", request, cancellationToken);
 
             var format = GetOutputFormat(json);
-            WriteOutput(OutputFormatter.FormatLocations(result?.Data, format), "No callees found.", format);
+            Console.WriteLine(OutputFormatter.FormatLocations(result?.Data, format));
 
             return result?.Success == true ? 0 : 1;
         }
@@ -243,7 +243,7 @@ public class SymbolCommand : CommandBase
                 client, "symbol", request, cancellationToken);
 
             var format = GetOutputFormat(json);
-            WriteOutput(OutputFormatter.FormatSymbolInfo(result?.Data, format), "No symbol found.", format);
+            Console.WriteLine(OutputFormatter.FormatSymbolInfo(result?.Data, format));
 
             return result?.Success == true ? 0 : 1;
         }
@@ -316,7 +316,7 @@ public class DiagnosticsCommand : CommandBase
                 client, "diagnostics", request, cancellationToken);
 
             var format = GetOutputFormat(json);
-            WriteOutput(OutputFormatter.FormatDiagnostics(result?.Data, format), "No diagnostics found.", format);
+            Console.WriteLine(OutputFormatter.FormatDiagnostics(result?.Data, format));
 
             return result?.Success == true ? 0 : 1;
         }

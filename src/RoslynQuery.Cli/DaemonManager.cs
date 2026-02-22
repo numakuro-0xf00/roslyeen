@@ -15,7 +15,6 @@ public static class DaemonManager
     public static async Task<IpcClient> GetOrStartDaemonAsync(
         string solutionPath,
         bool autoStart = true,
-        int idleTimeoutMinutes = 30,
         CancellationToken cancellationToken = default)
     {
         var socketPath = PathResolver.GetSocketPath(solutionPath);
@@ -44,33 +43,16 @@ public static class DaemonManager
         }
 
         // Start new daemon
-        var solutionName = Path.GetFileName(solutionPath);
-        Console.Error.WriteLine($"Starting daemon for {solutionName}...");
-
-        var process = await StartDaemonAsync(solutionPath, idleTimeoutMinutes, cancellationToken);
-
-        // Start reading stderr in background for error reporting
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await StartDaemonAsync(solutionPath, cancellationToken);
 
         // Wait for daemon to be ready
         var client2 = new IpcClient(socketPath);
         var connected = false;
         var maxAttempts = 30; // 30 seconds max
-        var sw = Stopwatch.StartNew();
 
         for (var i = 0; i < maxAttempts && !connected; i++)
         {
             await Task.Delay(1000, cancellationToken);
-
-            // Check if daemon crashed during startup
-            if (process.HasExited)
-            {
-                await client2.DisposeAsync();
-                var stderr = await stderrTask;
-                var detail = string.IsNullOrWhiteSpace(stderr) ? "" : $"\n{stderr}";
-                throw new InvalidOperationException(
-                    $"Daemon process exited during startup (exit code {process.ExitCode}){detail}");
-            }
 
             try
             {
@@ -82,26 +64,7 @@ public static class DaemonManager
                 if (i == maxAttempts - 1)
                 {
                     await client2.DisposeAsync();
-                    // Timeout - kill process and capture stderr
-                    try
-                    {
-                        process.Kill();
-                        await process.WaitForExitAsync(cancellationToken);
-                    }
-                    catch
-                    {
-                        // Ignore kill errors
-                    }
-                    var stderr = await stderrTask;
-                    var detail = string.IsNullOrWhiteSpace(stderr) ? "" : $"\n{stderr}";
-                    throw new InvalidOperationException(
-                        $"Failed to connect to daemon after {maxAttempts}s{detail}");
-                }
-
-                // Progress message every 5 seconds
-                if (sw.Elapsed.TotalSeconds >= 5 && i % 5 == 4)
-                {
-                    Console.Error.WriteLine($"Waiting for daemon to be ready... ({(int)sw.Elapsed.TotalSeconds}s)");
+                    throw new InvalidOperationException("Failed to connect to daemon after starting");
                 }
             }
         }
@@ -110,26 +73,16 @@ public static class DaemonManager
     }
 
     /// <summary>
-    /// Start the daemon for the given solution. Returns the started Process
-    /// so callers can monitor it and read stderr on failure.
+    /// Start the daemon for the given solution.
     /// </summary>
-    public static async Task<Process> StartDaemonAsync(string solutionPath, int idleTimeoutMinutes = 30, CancellationToken cancellationToken = default)
+    public static async Task StartDaemonAsync(string solutionPath, CancellationToken cancellationToken = default)
     {
         var daemonPath = GetDaemonPath();
-
-        // Use CLI's deps.json for dependency resolution when Daemon's own deps.json is missing
-        // (e.g., when installed as a dotnet tool where Daemon is bundled alongside CLI)
-        var daemonDir = Path.GetDirectoryName(daemonPath)!;
-        var daemonDepsPath = Path.Combine(daemonDir, "RoslynQuery.Daemon.deps.json");
-        var cliDepsPath = Path.Combine(daemonDir, "RoslynQuery.Cli.deps.json");
-        var depsArg = !File.Exists(daemonDepsPath) && File.Exists(cliDepsPath)
-            ? $"exec --depsfile \"{cliDepsPath}\" \"{daemonPath}\""
-            : $"\"{daemonPath}\"";
 
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"{depsArg} \"{solutionPath}\" --idle-timeout {idleTimeoutMinutes}",
+            Arguments = $"\"{daemonPath}\" \"{solutionPath}\"",
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
@@ -151,8 +104,6 @@ public static class DaemonManager
             var error = await process.StandardError.ReadToEndAsync(cancellationToken);
             throw new InvalidOperationException($"Daemon exited immediately: {error}");
         }
-
-        return process;
     }
 
     /// <summary>
@@ -237,19 +188,6 @@ public static class DaemonManager
                 await client.ConnectAsync();
                 var response = await client.SendRequestAsync("ping");
                 status.IsResponsive = response.IsSuccess;
-
-                if (response.IsSuccess && response.Result.HasValue)
-                {
-                    var result = response.Result.Value;
-                    if (result.TryGetProperty("idleTimeoutMinutes", out var timeoutEl))
-                    {
-                        status.IdleTimeoutMinutes = timeoutEl.GetDouble();
-                    }
-                    if (result.TryGetProperty("idleSeconds", out var idleEl))
-                    {
-                        status.IdleSeconds = idleEl.GetDouble();
-                    }
-                }
             }
             catch
             {
@@ -337,6 +275,4 @@ public class DaemonStatus
     public bool IsRunning { get; set; }
     public bool IsResponsive { get; set; }
     public int? ProcessId { get; set; }
-    public double? IdleTimeoutMinutes { get; set; }
-    public double? IdleSeconds { get; set; }
 }

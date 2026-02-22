@@ -23,18 +23,6 @@ public static class Program
             return 2;
         }
 
-        // Parse --idle-timeout option (default: 30 minutes, 0 = disabled)
-        TimeSpan? idleTimeout = TimeSpan.FromMinutes(30);
-        for (int i = 1; i < args.Length; i++)
-        {
-            if (args[i] == "--idle-timeout" && i + 1 < args.Length
-                && int.TryParse(args[i + 1], out var minutes) && minutes >= 0)
-            {
-                idleTimeout = minutes == 0 ? null : TimeSpan.FromMinutes(minutes);
-                i++;
-            }
-        }
-
         try
         {
             // CRITICAL: Initialize MSBuild BEFORE any Roslyn types are accessed
@@ -42,20 +30,19 @@ public static class Program
             Console.Error.WriteLine($"Using MSBuild from: {instance.MSBuildPath}");
             Console.Error.WriteLine($"MSBuild version: {instance.Version}");
 
-            return await RunDaemonAsync(solutionPath, idleTimeout);
+            return await RunDaemonAsync(solutionPath);
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Fatal error: {ex.Message}");
-            Console.Error.WriteLine(ex.StackTrace);
             return 1;
         }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static async Task<int> RunDaemonAsync(string solutionPath, TimeSpan? idleTimeout)
+    private static async Task<int> RunDaemonAsync(string solutionPath)
     {
-        await using var daemon = await DaemonHost.CreateAndStartAsync(solutionPath, idleTimeout);
+        await using var daemon = await DaemonHost.CreateAndStartAsync(solutionPath);
 
         Console.Error.WriteLine("Daemon ready. Waiting for requests...");
 

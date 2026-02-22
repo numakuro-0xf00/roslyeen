@@ -2,7 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RoslynQuery.Core\RoslynQuery.Core.csproj" />
-    <ProjectReference Include="..\RoslynQuery.Daemon\RoslynQuery.Daemon.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -14,11 +13,6 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PackAsTool>true</PackAsTool>
-    <ToolCommandName>roslyn-query</ToolCommandName>
-    <PackageId>RoslynQuery</PackageId>
-    <Version>0.1.0</Version>
-    <Description>Roslyn-based CLI tool for C# code navigation and analysis</Description>
   </PropertyGroup>
 
 </Project>

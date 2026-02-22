@@ -38,8 +38,7 @@ public sealed class DaemonHost : IAsyncDisposable
     /// This method must be called AFTER MSBuildLocator initialization.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static async Task<DaemonHost> CreateAndStartAsync(
-        string solutionPath, TimeSpan? idleTimeout = null, CancellationToken cancellationToken = default)
+    public static async Task<DaemonHost> CreateAndStartAsync(string solutionPath, CancellationToken cancellationToken = default)
     {
         var normalizedPath = PathResolver.NormalizePath(solutionPath);
         var solutionRoot = PathResolver.GetSolutionRoot(normalizedPath);
@@ -49,7 +48,7 @@ public sealed class DaemonHost : IAsyncDisposable
         var solutionManager = new SolutionManager(normalizedPath);
         var queryExecutor = new QueryExecutor(solutionManager);
         var fileWatcher = new DebouncedFileWatcher(solutionRoot);
-        var ipcServer = new IpcServer(socketPath, queryExecutor, idleTimeout);
+        var ipcServer = new IpcServer(socketPath, queryExecutor);
 
         var host = new DaemonHost(normalizedPath, solutionManager, queryExecutor, fileWatcher, ipcServer);
 
@@ -68,15 +67,6 @@ public sealed class DaemonHost : IAsyncDisposable
             // Start IPC server
             host._ipcServer.Start();
             Console.Error.WriteLine($"IPC server listening on: {socketPath}");
-
-            if (idleTimeout.HasValue)
-            {
-                Console.Error.WriteLine($"Idle timeout: {idleTimeout.Value.TotalMinutes:F0} minutes");
-            }
-            else
-            {
-                Console.Error.WriteLine("Idle timeout: disabled");
-            }
 
             // Write PID file
             var pidPath = PathResolver.GetPidFilePath(normalizedPath);
@@ -120,7 +110,6 @@ public sealed class DaemonHost : IAsyncDisposable
 
     private async void OnFilesChanged(object? sender, FileChangesEventArgs e)
     {
-        _ipcServer.RecordActivity();
         try
         {
             if (e.RequiresFullReload)
